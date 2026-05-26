@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from "recharts";
 
 // ========== CONFIG ==========
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw1kUftvbVemV80gPpuIQbyDZPJdh87S500UpmkmKmzDDobvqdwFKCzLPd7-8fVgrw/exec"; // GAS 部署 URL
-const DEMO_MODE = false; // 關閉 demo，使用 GAS 後端
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw1kUftvbVemV80gPpuIQbyDZPJdh87S500UpmkmKmzDDobvqdwFKCzLPd7-8fVgrw/exec";
+const DEMO_MODE = false;
+const TOKEN = import.meta.env.VITE_GAS_TOKEN ?? "";
 
 // ========== MOCK DATA ==========
 const generateMockData = () => {
@@ -543,7 +544,7 @@ ${summary}
       // 不帶 Content-Type header，避免 CORS preflight 問題
       const res = await fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "ai_analysis", prompt }),
+        body: JSON.stringify({ action: "ai_analysis", token: TOKEN, prompt }),
       });
       const data = await res.json();
       const text = data.text || data.error || "分析暫時無法完成，請稍後再試～";
@@ -651,7 +652,7 @@ export default function MigraineTracker() {
     if (DEMO_MODE) {
       setRecords(generateMockData());
     } else if (GAS_URL) {
-      fetch(`${GAS_URL}?action=fetch`)
+      fetch(`${GAS_URL}?action=fetch&token=${TOKEN}`)
         .then(r => r.json())
         .then(d => setRecords(d.records || []))
         .catch(console.error);
@@ -685,7 +686,7 @@ export default function MigraineTracker() {
     if (GAS_URL && !DEMO_MODE) {
       fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "record", ...record }),
+        body: JSON.stringify({ action: "record", token: TOKEN, ...record }),
       }).catch(console.error);
     }
   }, []);
