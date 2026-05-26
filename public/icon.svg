@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="120" fill="#D4A0B9"/>
+  <!-- Left lobe -->
+  <ellipse cx="196" cy="220" rx="88" ry="100" fill="none" stroke="white" stroke-width="26" stroke-linecap="round"/>
+  <!-- Right lobe -->
+  <ellipse cx="316" cy="220" rx="88" ry="100" fill="none" stroke="white" stroke-width="26" stroke-linecap="round"/>
+  <!-- Center divider -->
+  <line x1="256" y1="126" x2="256" y2="320" stroke="white" stroke-width="22" stroke-linecap="round"/>
+  <!-- Bottom join -->
+  <path d="M 196 318 Q 256 368 316 318" fill="none" stroke="white" stroke-width="26" stroke-linecap="round"/>
+  <!-- Left folds -->
+  <path d="M 130 190 Q 160 175 185 195" fill="none" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <path d="M 125 250 Q 158 235 182 255" fill="none" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <!-- Right folds -->
+  <path d="M 382 190 Q 352 175 327 195" fill="none" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <path d="M 387 250 Q 354 235 330 255" fill="none" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <!-- Sparkle -->
+  <circle cx="390" cy="118" r="18" fill="white" opacity="0.85"/>
+  <circle cx="420" cy="148" r="11" fill="white" opacity="0.6"/>
+  <circle cx="362" cy="142" r="11" fill="white" opacity="0.6"/>
+</svg>
