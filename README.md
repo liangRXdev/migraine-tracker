@@ -4,6 +4,8 @@
 
 **Live Demo →** https://liangrxdev.github.io/migraine-tracker/
 
+> 支援安裝到手機主畫面，以 App 模式離線使用（Android Chrome / iOS Safari）
+
 ---
 
 ## 功能
@@ -16,16 +18,30 @@
 
 ---
 
+## 安裝為 App（PWA）
+
+| 平台 | 步驟 |
+|------|------|
+| **Android Chrome** | 右上角選單 → 新增到主畫面 |
+| **iOS Safari** | 分享按鈕 → 加入主畫面 |
+| **桌面 Chrome** | 網址列右側安裝圖示 |
+
+安裝後以全螢幕 App 模式開啟，無瀏覽器 UI，字體與圖示已快取可離線瀏覽。
+
+---
+
 ## 技術架構
 
 ```
-Frontend (GitHub Pages)          Backend (Google Apps Script)
-React + Vite                     ├─ 儲存記錄 → Google Sheets
+Frontend (GitHub Pages / PWA)    Backend (Google Apps Script)
+React 18 + Vite 6                ├─ 儲存記錄 → Google Sheets
 Recharts 圖表                    └─ 呼叫 Gemini API（AI 分析）
+vite-plugin-pwa (Workbox)
 ```
 
-- **前端**：React 18、Vite 6、Recharts
-- **後端**：Google Apps Script — 作為 API proxy，Gemini API Key 存於 `PropertiesService`（不寫死）
+- **前端**：React 18、Vite 6、Recharts、vite-plugin-pwa
+- **Service Worker**：Workbox（App shell CacheFirst；Google Fonts 快取一年；GAS API NetworkOnly）
+- **後端**：Google Apps Script，Gemini / Weather API Key 存於 `PropertiesService`
 - **資料儲存**：Google Sheets（每列一天記錄）
 - **部署**：GitHub Actions → GitHub Pages
 
@@ -40,27 +56,44 @@ npm install
 # 啟動開發伺服器
 npm run dev
 
-# 建置
+# 建置（含 PWA 產生 sw.js + manifest）
 npm run build
 ```
 
-> 若要使用真實資料，需在 `src/App.jsx` 的 `GAS_URL` 填入自己的 GAS 部署網址。  
+> 若要使用真實資料，需在 `src/App.jsx` 的 `GAS_URL` 填入自己的 GAS 部署網址，  
+> 並在 `.env` 設定 `VITE_GAS_TOKEN`。  
 > 測試用途可將 `DEMO_MODE` 改為 `true`，會產生 30 天假資料。
+
+---
+
+## 安全機制
+
+所有 GAS 請求都帶有 token 驗證，防止未授權讀寫與 AI 端點濫用：
+
+- Token 存於 `.env`（本地）與 GitHub Actions Secret（CI/CD），不進 git
+- GAS 端讀取 `PropertiesService` 的 `API_SECRET` 驗證每筆請求
 
 ---
 
 ## GAS 後端設定
 
 1. 在 Google Apps Script 建立新專案，部署為「網頁應用程式」（Anyone 可存取）
-2. 在 GAS 的「專案設定 → 指令碼屬性」加入：
-   - `GEMINI_API_KEY`：你的 Gemini API Key
-3. GAS 需處理以下 endpoint：
+2. 在「專案設定 → 指令碼屬性」加入：
+
+| 屬性 | 說明 |
+|------|------|
+| `API_SECRET` | 與 `.env` 的 `VITE_GAS_TOKEN` 相同值 |
+| `GEMINI_API_KEY` | Gemini API Key |
+| `WEATHER_API_KEY` | OpenWeatherMap API Key（選填） |
+
+3. GAS endpoint：
 
 | action | 方法 | 說明 |
 |--------|------|------|
-| `fetch` | GET | 回傳所有記錄 `{ records: [...] }` |
-| `record` | POST | 寫入當日記錄至 Sheets |
+| `fetch` | GET | 回傳最近 90 天記錄 |
+| `record` | POST | 寫入當日記錄至 Sheets（同日可覆蓋） |
 | `ai_analysis` | POST | 轉送 prompt 至 Gemini，回傳分析文字 |
+| `stats` | GET | 回傳統計摘要與 Trigger 排行 |
 
 ---
 
@@ -69,7 +102,7 @@ npm run build
 Push 到 `main` branch 後，GitHub Actions 自動執行：
 
 ```
-build job  →  npm ci + npm run build
+build job  →  npm ci + npm run build (含 VITE_GAS_TOKEN 注入)
 deploy job →  actions/deploy-pages → GitHub Pages
 ```
 
@@ -92,3 +125,5 @@ Workflow 檔案：`.github/workflows/deploy.yml`
 | `sittingTime` | string | <2hr / 2-6hr / >6hr |
 | `exercise` | 0/1 | 是否運動 |
 | `caffeine` | 0/1 | 是否攝取咖啡因 |
+| `weather_temp` | number | 氣溫（℃，自動抓取） |
+| `weather_pressure` | number | 氣壓（hPa，自動抓取） |
