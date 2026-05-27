@@ -1,10 +1,40 @@
-import { useState, useEffect, useCallback } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from "recharts";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, CartesianGrid, ComposedChart, Area,
+} from "recharts";
 
 // ========== CONFIG ==========
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw1kUftvbVemV80gPpuIQbyDZPJdh87S500UpmkmKmzDDobvqdwFKCzLPd7-8fVgrw/exec";
 const DEMO_MODE = false;
 const TOKEN = import.meta.env.VITE_GAS_TOKEN ?? "";
+const WEATHER_LAT = 24.15;
+const WEATHER_LON = 120.67;
+
+// ========== WEATHER UTILS ==========
+const wmoEmoji = (code) => {
+  if (code === 0) return "☀️";
+  if (code <= 3) return "⛅";
+  if (code <= 48) return "🌫️";
+  if (code <= 55) return "🌦️";
+  if (code <= 65) return "🌧️";
+  if (code <= 77) return "❄️";
+  if (code <= 82) return "🌧️";
+  if (code >= 95) return "⛈️";
+  return "🌡️";
+};
+
+const fetchWeather = async () => {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LAT}&longitude=${WEATHER_LON}&current=temperature_2m,surface_pressure,weather_code&timezone=Asia%2FTaipei`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const c = data.current;
+  return {
+    weather_temp: c.temperature_2m,
+    weather_pressure: Math.round(c.surface_pressure),
+    weather_code: c.weather_code,
+  };
+};
 
 // ========== MOCK DATA ==========
 const generateMockData = () => {
@@ -19,16 +49,21 @@ const generateMockData = () => {
       date: dateStr,
       headache: ha ? 1 : 0,
       intensity: ha ? Math.floor(Math.random() * 6) + 3 : 0,
+      location: ha ? ["左側"] : [],
       neckPain: Math.floor(Math.random() * 7),
+      neckSide: Math.random() > 0.5 ? ["左側"] : ["右側"],
       sleepHours: +(5 + Math.random() * 4).toFixed(1),
       sleepQuality: Math.floor(Math.random() * 5) + 1,
       stress: Math.floor(Math.random() * 5) + 1,
-      menstrualPhase: ["無", "無", "無", "經前", "月經中"][Math.floor(Math.random() * 5)],
+      lastPeriodDate: i === 20 ? new Date(now.getTime() - 20 * 86400000).toISOString().split("T")[0] : "",
       sittingTime: ["<2hr", "2-6hr", ">6hr"][Math.floor(Math.random() * 3)],
       exercise: Math.random() > 0.5 ? 1 : 0,
       caffeine: Math.random() > 0.4 ? 1 : 0,
+      waterOver1500: Math.random() > 0.5,
+      notes: "",
       weather_temp: +(24 + Math.random() * 8).toFixed(1),
       weather_pressure: +(1005 + Math.random() * 15).toFixed(0),
+      weather_code: [0, 1, 2, 3, 61, 80][Math.floor(Math.random() * 6)],
     });
   }
   return data;
@@ -56,23 +91,18 @@ const T = {
 
 const font = `'Zen Maru Gothic', 'Noto Sans TC', -apple-system, sans-serif`;
 
-// ========== COMPONENTS ==========
+// ========== BASE COMPONENTS ==========
 
 const ToggleButton = ({ active, onClick, children, color = T.primary, style = {} }) => (
   <button
     onClick={onClick}
     style={{
-      padding: "8px 16px",
-      borderRadius: 20,
+      padding: "8px 16px", borderRadius: 20,
       border: active ? `2px solid ${color}` : `2px solid ${T.border}`,
       background: active ? color + "22" : T.card,
       color: active ? color : T.textLight,
-      fontFamily: font,
-      fontSize: 14,
-      fontWeight: active ? 600 : 400,
-      cursor: "pointer",
-      transition: "all 0.2s",
-      ...style,
+      fontFamily: font, fontSize: 14, fontWeight: active ? 600 : 400,
+      cursor: "pointer", transition: "all 0.2s", ...style,
     }}
   >
     {children}
@@ -82,12 +112,11 @@ const ToggleButton = ({ active, onClick, children, color = T.primary, style = {}
 const SliderRow = ({ label, emoji, value, onChange, max = 10, showValue = true }) => (
   <div style={{ marginBottom: 16 }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-      <span style={{ fontSize: 14, color: T.text, fontFamily: font }}>
-        {emoji} {label}
-      </span>
+      <span style={{ fontSize: 14, color: T.text, fontFamily: font }}>{emoji} {label}</span>
       {showValue && (
         <span style={{
-          fontSize: 13, fontWeight: 600, color: value > max * 0.7 ? T.danger : value > max * 0.4 ? T.warm : T.success,
+          fontSize: 13, fontWeight: 600,
+          color: value > max * 0.7 ? T.danger : value > max * 0.4 ? T.warm : T.success,
           background: value > max * 0.7 ? T.dangerLight : value > max * 0.4 ? T.warmLight : T.successLight,
           padding: "2px 10px", borderRadius: 12, fontFamily: font,
         }}>
@@ -116,17 +145,12 @@ const EmojiSelector = ({ options, value, onChange, multi = false }) => (
           }
         }}
         style={{
-          padding: "6px 12px",
-          borderRadius: 16,
+          padding: "6px 12px", borderRadius: 16,
           border: (multi ? (value || []).includes(opt.value) : value === opt.value)
             ? `2px solid ${T.primary}` : `2px solid ${T.border}`,
           background: (multi ? (value || []).includes(opt.value) : value === opt.value)
             ? T.primaryLight : T.card,
-          fontSize: 13,
-          fontFamily: font,
-          cursor: "pointer",
-          transition: "all 0.15s",
-          color: T.text,
+          fontSize: 13, fontFamily: font, cursor: "pointer", transition: "all 0.15s", color: T.text,
         }}
       >
         {opt.emoji} {opt.label}
@@ -138,15 +162,11 @@ const EmojiSelector = ({ options, value, onChange, multi = false }) => (
 const StarRating = ({ value, onChange, max = 5 }) => (
   <div style={{ display: "flex", gap: 4 }}>
     {Array.from({ length: max }, (_, i) => (
-      <button
-        key={i}
-        onClick={() => onChange(i + 1)}
+      <button key={i} onClick={() => onChange(i + 1)}
         style={{
           background: "none", border: "none", cursor: "pointer", padding: 2,
-          fontSize: 22, filter: i < value ? "none" : "grayscale(1) opacity(0.3)",
-          transition: "all 0.15s",
-        }}
-      >
+          fontSize: 22, filter: i < value ? "none" : "grayscale(1) opacity(0.3)", transition: "all 0.15s",
+        }}>
         ⭐
       </button>
     ))}
@@ -156,8 +176,7 @@ const StarRating = ({ value, onChange, max = 5 }) => (
 const Card = ({ children, style = {} }) => (
   <div style={{
     background: T.card, borderRadius: 20, padding: 20,
-    boxShadow: T.shadow, border: `1px solid ${T.border}`,
-    marginBottom: 14, ...style,
+    boxShadow: T.shadow, border: `1px solid ${T.border}`, marginBottom: 14, ...style,
   }}>
     {children}
   </div>
@@ -172,28 +191,169 @@ const SectionLabel = ({ children }) => (
   </div>
 );
 
+// ========== PASSWORD GATE ==========
+const PasswordGate = ({ onVerified }) => {
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `${GAS_URL}?action=verify_password&token=${TOKEN}&password=${encodeURIComponent(input)}`
+      );
+      const data = await res.json();
+      if (data.valid) {
+        sessionStorage.setItem("migraine_auth", "1");
+        onVerified();
+      } else {
+        setError("密碼不對，再試試看 ～");
+      }
+    } catch {
+      setError("連線有點問題，請稍後再試");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: 24, fontFamily: font,
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 12 }}>🧠✨</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: T.text, marginBottom: 4 }}>小腦袋日記</div>
+      <div style={{ fontSize: 13, color: T.textLight, marginBottom: 32 }}>請輸入密碼繼續</div>
+      <div style={{
+        background: T.card, borderRadius: 24, padding: 28, boxShadow: T.shadow,
+        border: `1px solid ${T.border}`, width: "100%", maxWidth: 340,
+      }}>
+        <input
+          type="password"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          placeholder="輸入密碼…"
+          style={{
+            width: "100%", padding: "12px 16px", borderRadius: 14,
+            border: `2px solid ${error ? T.danger : T.border}`,
+            fontSize: 16, fontFamily: font, color: T.text, outline: "none",
+            background: T.bg, boxSizing: "border-box", marginBottom: 8,
+          }}
+        />
+        {error && (
+          <div style={{ fontSize: 13, color: T.danger, marginBottom: 10, textAlign: "center" }}>
+            {error}
+          </div>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{
+            width: "100%", padding: "13px 0", borderRadius: 14, border: "none",
+            background: `linear-gradient(135deg, ${T.primary}, ${T.accent})`,
+            color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: font,
+            cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
+          }}>
+          {loading ? "驗證中…" : "進入 💕"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ========== WARM MESSAGES ==========
+const WARM_MESSAGES = [
+  "辛苦了親愛的～頭痛很難受，記得多休息、讓自己好好放鬆 💕",
+  "頭痛的時候最難熬了，你已經很努力了，先好好躺一會兒吧 🌸",
+  "記得喝點水、關掉螢幕讓眼睛休息一下，你值得被好好照顧 🫧",
+  "頭在鬧脾氣呢～深呼吸、把燈光調暗，小腦袋需要你的溫柔 🌙",
+  "知道你在撐著，謝謝你還願意記錄下來。好好照顧自己 💗",
+];
+
+const WarmMessageCard = ({ onClose }) => {
+  const msg = useMemo(() => WARM_MESSAGES[Math.floor(Math.random() * WARM_MESSAGES.length)], []);
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(90,74,92,0.35)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 24,
+    }}>
+      <div style={{
+        background: T.card, borderRadius: 24, padding: 28, maxWidth: 340, width: "100%",
+        boxShadow: "0 8px 32px rgba(90,74,92,0.18)", textAlign: "center",
+        animation: "fadeIn 0.3s ease",
+      }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🌸</div>
+        <div style={{ fontSize: 15, color: T.text, fontFamily: font, lineHeight: 1.8, marginBottom: 20 }}>
+          {msg}
+        </div>
+        <button onClick={onClose} style={{
+          padding: "10px 28px", borderRadius: 14, border: "none",
+          background: `linear-gradient(135deg, ${T.primary}, ${T.accent})`,
+          color: "#fff", fontSize: 14, fontWeight: 600, fontFamily: font, cursor: "pointer",
+        }}>
+          謝謝你 💕
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ========== CYCLE CALC ==========
+const calcCycle = (lastPeriodDate) => {
+  if (!lastPeriodDate) return null;
+  const last = new Date(lastPeriodDate);
+  const ovulation = new Date(last); ovulation.setDate(last.getDate() + 14);
+  const nextPeriod = new Date(last); nextPeriod.setDate(last.getDate() + 28);
+  const preStart = new Date(nextPeriod); preStart.setDate(nextPeriod.getDate() - 5);
+  const fmt = (d) => d.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const lastD = new Date(last); lastD.setHours(0, 0, 0, 0);
+  const menstrualEnd = new Date(lastD); menstrualEnd.setDate(lastD.getDate() + 7);
+  let phase = "一般";
+  if (today >= lastD && today < menstrualEnd) phase = "🩸 月經中";
+  else if (today >= preStart && today < nextPeriod) phase = "🌙 經前期";
+  else if (Math.abs(today - ovulation) <= 1.5 * 86400000) phase = "🌟 排卵期附近";
+  return {
+    ovulationStr: fmt(ovulation),
+    nextPeriodStr: fmt(nextPeriod),
+    preStartStr: fmt(preStart),
+    phase,
+    daysToNext: Math.ceil((nextPeriod - today) / 86400000),
+  };
+};
+
 // ========== RECORD TAB ==========
-const RecordTab = ({ onSave }) => {
+const RecordTab = ({ onSave, initialLastPeriodDate }) => {
   const [form, setForm] = useState({
     headache: false,
     intensity: 5,
     location: [],
     neckPain: 3,
+    neckSide: [],
     sleepHours: 7,
     sleepQuality: 3,
-    menstrualPhase: "無",
+    lastPeriodDate: initialLastPeriodDate || "",
     stress: 2,
     sittingTime: "2-6hr",
     exercise: false,
     caffeine: false,
+    waterOver1500: null,
+    notes: "",
   });
   const [saved, setSaved] = useState(false);
+  const [showWarm, setShowWarm] = useState(false);
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const cycle = useMemo(() => calcCycle(form.lastPeriodDate), [form.lastPeriodDate]);
 
   const handleSave = () => {
     onSave(form);
     setSaved(true);
+    if (form.headache) setShowWarm(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
@@ -201,6 +361,8 @@ const RecordTab = ({ onSave }) => {
 
   return (
     <div>
+      {showWarm && <WarmMessageCard onClose={() => setShowWarm(false)} />}
+
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 16, padding: "10px 0" }}>
         <div style={{ fontSize: 14, color: T.textLight, fontFamily: font }}>{todayStr}</div>
@@ -213,20 +375,10 @@ const RecordTab = ({ onSave }) => {
       <Card>
         <SectionLabel>頭痛狀況</SectionLabel>
         <div style={{ display: "flex", gap: 10, marginBottom: form.headache ? 16 : 0 }}>
-          <ToggleButton
-            active={!form.headache}
-            onClick={() => set("headache", false)}
-            color={T.success}
-            style={{ flex: 1 }}
-          >
+          <ToggleButton active={!form.headache} onClick={() => set("headache", false)} color={T.success} style={{ flex: 1 }}>
             😊 沒有頭痛
           </ToggleButton>
-          <ToggleButton
-            active={form.headache}
-            onClick={() => set("headache", true)}
-            color={T.danger}
-            style={{ flex: 1 }}
-          >
+          <ToggleButton active={form.headache} onClick={() => set("headache", true)} color={T.danger} style={{ flex: 1 }}>
             🤕 有頭痛
           </ToggleButton>
         </div>
@@ -238,9 +390,7 @@ const RecordTab = ({ onSave }) => {
                 📍 疼痛位置（可多選）
               </span>
               <EmojiSelector
-                multi
-                value={form.location}
-                onChange={v => set("location", v)}
+                multi value={form.location} onChange={v => set("location", v)}
                 options={[
                   { value: "左側", label: "左側", emoji: "◀️" },
                   { value: "右側", label: "右側", emoji: "▶️" },
@@ -257,7 +407,21 @@ const RecordTab = ({ onSave }) => {
       {/* Neck & Sleep */}
       <Card>
         <SectionLabel>身體 & 睡眠</SectionLabel>
-        <SliderRow label="肩頸痠痛" emoji="🦴" value={form.neckPain} onChange={v => set("neckPain", v)} />
+        <SliderRow label="肩頸酸痛" emoji="🦴" value={form.neckPain} onChange={v => set("neckPain", v)} />
+        {form.neckPain > 0 && (
+          <div style={{ marginTop: -8, marginBottom: 14, animation: "fadeIn 0.2s ease" }}>
+            <span style={{ fontSize: 13, color: T.textLight, fontFamily: font, display: "block", marginBottom: 6 }}>
+              📍 酸痛側邊（可多選）
+            </span>
+            <EmojiSelector
+              multi value={form.neckSide} onChange={v => set("neckSide", v)}
+              options={[
+                { value: "左側", label: "左側", emoji: "⬅️" },
+                { value: "右側", label: "右側", emoji: "➡️" },
+              ]}
+            />
+          </div>
+        )}
         <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 14 }}>
           <span style={{ fontSize: 14, color: T.text, fontFamily: font, whiteSpace: "nowrap" }}>😴 睡眠</span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -275,28 +439,60 @@ const RecordTab = ({ onSave }) => {
         </div>
       </Card>
 
-      {/* Context */}
+      {/* Life Context */}
       <Card>
         <SectionLabel>生活狀態</SectionLabel>
+
+        {/* 月經首日 */}
         <div style={{ marginBottom: 14 }}>
-          <span style={{ fontSize: 13, color: T.textLight, fontFamily: font, display: "block", marginBottom: 8 }}>🌙 月經週期</span>
-          <EmojiSelector
-            value={form.menstrualPhase}
-            onChange={v => set("menstrualPhase", v)}
-            options={[
-              { value: "無", label: "無", emoji: "—" },
-              { value: "經前", label: "經前", emoji: "🌙" },
-              { value: "月經中", label: "月經中", emoji: "🩸" },
-              { value: "排卵期", label: "排卵期", emoji: "🌟" },
-            ]}
+          <span style={{ fontSize: 13, color: T.textLight, fontFamily: font, display: "block", marginBottom: 8 }}>
+            🩸 最近月經首日
+          </span>
+          <input
+            type="date"
+            value={form.lastPeriodDate}
+            max={new Date().toISOString().split("T")[0]}
+            onChange={e => set("lastPeriodDate", e.target.value)}
+            style={{
+              width: "100%", padding: "10px 14px", borderRadius: 12,
+              border: `2px solid ${form.lastPeriodDate ? T.primary : T.border}`,
+              fontSize: 14, fontFamily: font, color: T.text,
+              background: T.bg, boxSizing: "border-box", outline: "none",
+            }}
           />
+          {cycle && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: T.textLight, fontFamily: font, marginBottom: 6 }}>
+                目前週期狀態：<span style={{ fontWeight: 600, color: T.primary }}>{cycle.phase}</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[
+                  { label: "🌟 排卵期", val: cycle.ovulationStr, color: T.warm },
+                  { label: "🌙 經前開始", val: cycle.preStartStr, color: T.accent },
+                  {
+                    label: "🩸 預估下次",
+                    val: `${cycle.nextPeriodStr}（${cycle.daysToNext > 0 ? `${cycle.daysToNext}天後` : "快到了"}）`,
+                    color: T.danger,
+                  },
+                ].map(item => (
+                  <div key={item.label} style={{
+                    background: item.color + "18", borderRadius: 10, padding: "5px 10px",
+                    fontSize: 12, color: T.text, fontFamily: font,
+                    border: `1px solid ${item.color}44`,
+                  }}>
+                    {item.label}：<strong>{item.val}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* 壓力 */}
         <div style={{ marginBottom: 14 }}>
           <span style={{ fontSize: 13, color: T.textLight, fontFamily: font, display: "block", marginBottom: 8 }}>😰 壓力程度</span>
           <div style={{ display: "flex", gap: 6 }}>
-            {[
-              { v: 1, e: "😌" }, { v: 2, e: "🙂" }, { v: 3, e: "😐" }, { v: 4, e: "😣" }, { v: 5, e: "🤯" },
-            ].map(({ v, e }) => (
+            {[{ v: 1, e: "😌" }, { v: 2, e: "🙂" }, { v: 3, e: "😐" }, { v: 4, e: "😣" }, { v: 5, e: "🤯" }].map(({ v, e }) => (
               <button key={v} onClick={() => set("stress", v)}
                 style={{
                   flex: 1, padding: "8px 0", borderRadius: 14,
@@ -309,11 +505,12 @@ const RecordTab = ({ onSave }) => {
             ))}
           </div>
         </div>
+
+        {/* 久坐 */}
         <div style={{ marginBottom: 14 }}>
           <span style={{ fontSize: 13, color: T.textLight, fontFamily: font, display: "block", marginBottom: 8 }}>🪑 久坐時間</span>
           <EmojiSelector
-            value={form.sittingTime}
-            onChange={v => set("sittingTime", v)}
+            value={form.sittingTime} onChange={v => set("sittingTime", v)}
             options={[
               { value: "<2hr", label: "<2hr", emoji: "🏃" },
               { value: "2-6hr", label: "2-6hr", emoji: "🪑" },
@@ -321,7 +518,9 @@ const RecordTab = ({ onSave }) => {
             ]}
           />
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+
+        {/* 運動 + 咖啡因 */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
           <ToggleButton active={form.exercise} onClick={() => set("exercise", !form.exercise)} color={T.success} style={{ flex: 1 }}>
             {form.exercise ? "🏋️ 有運動" : "🛋 沒運動"}
           </ToggleButton>
@@ -329,6 +528,47 @@ const RecordTab = ({ onSave }) => {
             {form.caffeine ? "☕ 有咖啡因" : "🚫 無咖啡因"}
           </ToggleButton>
         </div>
+
+        {/* 飲水超過 1500cc */}
+        <div>
+          <span style={{ fontSize: 13, color: T.textLight, fontFamily: font, display: "block", marginBottom: 8 }}>
+            💧 今日飲水有超過 1500cc 嗎？
+          </span>
+          <div style={{ display: "flex", gap: 10 }}>
+            {[
+              { val: true, label: "✅ 有超過", color: T.success },
+              { val: false, label: "❌ 不足", color: T.danger },
+            ].map(opt => (
+              <ToggleButton
+                key={String(opt.val)}
+                active={form.waterOver1500 === opt.val}
+                onClick={() => set("waterOver1500", form.waterOver1500 === opt.val ? null : opt.val)}
+                color={opt.color}
+                style={{ flex: 1 }}
+              >
+                {opt.label}
+              </ToggleButton>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* 備註 */}
+      <Card>
+        <SectionLabel>備註</SectionLabel>
+        <textarea
+          value={form.notes}
+          onChange={e => set("notes", e.target.value)}
+          placeholder="有什麼想記錄的都可以寫這裡…"
+          rows={3}
+          style={{
+            width: "100%", padding: "10px 14px", borderRadius: 12,
+            border: `2px solid ${form.notes ? T.primary : T.border}`,
+            fontSize: 14, fontFamily: font, color: T.text, background: T.bg,
+            resize: "vertical", boxSizing: "border-box", outline: "none",
+            lineHeight: 1.6,
+          }}
+        />
       </Card>
 
       {/* Save */}
@@ -349,20 +589,38 @@ const RecordTab = ({ onSave }) => {
 // ========== TRENDS TAB ==========
 const TrendsTab = ({ records }) => {
   const last14 = records.slice(-14);
+
   const chartData = last14.map(r => ({
     date: r.date.slice(5),
-    頭痛: r.intensity,
-    肩頸: r.neckPain,
-    睡眠: r.sleepHours,
-    壓力: r.stress * 2,
+    頭痛: r.intensity || 0,
+    肩頸: r.neckPain || 0,
+    睡眠: r.sleepHours || 0,
+    壓力: (r.stress || 0) * 2,
+    氣溫: r.weather_temp ?? null,
+    氣壓: r.weather_pressure ?? null,
+    天氣: r.weather_code ?? null,
   }));
+
+  const hasWeather = last14.some(r => r.weather_temp != null);
 
   const headacheDays = records.filter(r => r.headache).length;
   const totalDays = records.length;
   const avgIntensity = headacheDays > 0
     ? (records.filter(r => r.headache).reduce((s, r) => s + r.intensity, 0) / headacheDays).toFixed(1)
     : 0;
-  const avgSleep = (records.reduce((s, r) => s + r.sleepHours, 0) / totalDays).toFixed(1);
+  const avgSleep = totalDays > 0
+    ? (records.reduce((s, r) => s + r.sleepHours, 0) / totalDays).toFixed(1)
+    : 0;
+
+  const CustomWeatherDot = (props) => {
+    const { cx, cy, payload } = props;
+    if (payload.天氣 == null || cx == null) return null;
+    return (
+      <text x={cx} y={cy - 10} textAnchor="middle" fontSize={13}>
+        {wmoEmoji(payload.天氣)}
+      </text>
+    );
+  };
 
   return (
     <div>
@@ -387,7 +645,7 @@ const TrendsTab = ({ records }) => {
         ))}
       </div>
 
-      {/* Line Chart */}
+      {/* Main Line Chart */}
       <Card>
         <SectionLabel>疼痛 & 睡眠趨勢（14 日）</SectionLabel>
         <ResponsiveContainer width="100%" height={200}>
@@ -395,15 +653,58 @@ const TrendsTab = ({ records }) => {
             <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: T.textLight }} />
             <YAxis tick={{ fontSize: 10, fill: T.textLight }} domain={[0, 10]} />
-            <Tooltip
-              contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontFamily: font, fontSize: 12 }}
-            />
+            <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontFamily: font, fontSize: 12 }} />
             <Line type="monotone" dataKey="頭痛" stroke={T.danger} strokeWidth={2} dot={{ r: 3 }} />
             <Line type="monotone" dataKey="肩頸" stroke={T.warm} strokeWidth={2} dot={{ r: 3 }} />
             <Line type="monotone" dataKey="睡眠" stroke={T.accent} strokeWidth={2} dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
       </Card>
+
+      {/* Weather Charts */}
+      {hasWeather && (
+        <>
+          <Card>
+            <SectionLabel>🌡️ 氣溫趨勢（14 日）</SectionLabel>
+            <ResponsiveContainer width="100%" height={190}>
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: T.textLight }} />
+                <YAxis tick={{ fontSize: 10, fill: T.textLight }} domain={["auto", "auto"]} unit="°C" />
+                <Tooltip
+                  formatter={(v) => [`${v}°C`, "氣溫"]}
+                  contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontFamily: font, fontSize: 12 }}
+                />
+                <Area
+                  type="monotone" dataKey="氣溫"
+                  stroke="#FF8C42" fill="#FF8C4222" strokeWidth={2}
+                  dot={<CustomWeatherDot />}
+                  connectNulls
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </Card>
+
+          <Card>
+            <SectionLabel>🌬️ 氣壓趨勢（14 日）</SectionLabel>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: T.textLight }} />
+                <YAxis tick={{ fontSize: 10, fill: T.textLight }} domain={["auto", "auto"]} unit=" hPa" width={58} />
+                <Tooltip
+                  formatter={(v) => [`${v} hPa`, "氣壓"]}
+                  contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontFamily: font, fontSize: 12 }}
+                />
+                <Line type="monotone" dataKey="氣壓" stroke={T.accent} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{ fontSize: 11, color: T.textLight, fontFamily: font, marginTop: 6, textAlign: "center" }}>
+              氣壓急降時通常與頭痛發作有關，可對照上方趨勢圖觀察
+            </div>
+          </Card>
+        </>
+      )}
 
       {/* Headache by Day of Week */}
       <Card>
@@ -440,91 +741,50 @@ const InsightsTab = ({ records }) => {
   const [aiResponse, setAiResponse] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 規則分析（前端計算，不需 API）
   const ruleInsights = (() => {
     if (records.length < 7) return [];
     const ha = records.filter(r => r.headache);
     const noHa = records.filter(r => !r.headache);
     const insights = [];
 
-    // 睡眠不足
-    const lowSleepHa = ha.filter(r => r.sleepHours < 6).length;
-    const lowSleepNoHa = noHa.filter(r => r.sleepHours < 6).length;
-    const lowSleepTotal = lowSleepHa + lowSleepNoHa;
-    if (lowSleepTotal >= 2) {
-      const rate = Math.round(lowSleepHa / lowSleepTotal * 100);
-      insights.push({ trigger: "睡眠不足 (<6hr)", rate, emoji: "😴", tip: "睡不夠的時候，小腦袋比較容易鬧脾氣喔～" });
-    }
+    const check = (label, emoji, tip, filterFn) => {
+      const haN = ha.filter(filterFn).length;
+      const noHaN = noHa.filter(filterFn).length;
+      const total = haN + noHaN;
+      if (total >= 2) insights.push({ trigger: label, rate: Math.round(haN / total * 100), emoji, tip });
+    };
 
-    // 經前
-    const preHa = ha.filter(r => r.menstrualPhase === "經前").length;
-    const preNoHa = noHa.filter(r => r.menstrualPhase === "經前").length;
-    const preTotal = preHa + preNoHa;
-    if (preTotal >= 2) {
-      const rate = Math.round(preHa / preTotal * 100);
-      insights.push({ trigger: "經前期", rate, emoji: "🌙", tip: "月經快來的時候要特別好好休息～" });
-    }
-
-    // 久坐
-    const sitHa = ha.filter(r => r.sittingTime === ">6hr").length;
-    const sitNoHa = noHa.filter(r => r.sittingTime === ">6hr").length;
-    const sitTotal = sitHa + sitNoHa;
-    if (sitTotal >= 2) {
-      const rate = Math.round(sitHa / sitTotal * 100);
-      insights.push({ trigger: "久坐 >6hr", rate, emoji: "🪑", tip: "坐太久肩膀會偷偷加班，記得站起來動一動！" });
-    }
-
-    // 高壓力
-    const stressHa = ha.filter(r => r.stress >= 4).length;
-    const stressNoHa = noHa.filter(r => r.stress >= 4).length;
-    const stressTotal = stressHa + stressNoHa;
-    if (stressTotal >= 2) {
-      const rate = Math.round(stressHa / stressTotal * 100);
-      insights.push({ trigger: "高壓力 (≥4)", rate, emoji: "😣", tip: "壓力大的日子，頭痛怪獸比較活躍呢…" });
-    }
-
-    // 咖啡因
-    const cafHa = ha.filter(r => r.caffeine).length;
-    const cafNoHa = noHa.filter(r => r.caffeine).length;
-    const cafTotal = cafHa + cafNoHa;
-    if (cafTotal >= 2) {
-      const rate = Math.round(cafHa / cafTotal * 100);
-      insights.push({ trigger: "咖啡因攝取", rate, emoji: "☕", tip: "咖啡和頭痛的關係有點微妙，觀察看看～" });
-    }
+    check("睡眠不足 (<6hr)", "😴", "睡不夠的時候，小腦袋比較容易鬧脾氣喔～", r => r.sleepHours < 6);
+    check("高壓力 (≥4)", "😣", "壓力大的日子，頭痛怪獸比較活躍呢…", r => r.stress >= 4);
+    check("久坐 >6hr", "🪑", "坐太久肩膀會偷偷加班，記得站起來動一動！", r => r.sittingTime === ">6hr");
+    check("咖啡因攝取", "☕", "咖啡和頭痛的關係有點微妙，觀察看看～", r => r.caffeine);
+    check("飲水不足", "💧", "水喝不夠容易讓頭痛加劇，多補充水分吧～", r => r.waterOver1500 === false);
 
     insights.sort((a, b) => b.rate - a.rate);
     return insights;
   })();
 
-  // 本週 vs 上週比較
   const weekCompare = (() => {
     const now = new Date();
-    const thisWeek = records.filter(r => {
-      const d = new Date(r.date);
-      return (now - d) / 86400000 < 7;
-    });
+    const thisWeek = records.filter(r => (now - new Date(r.date)) / 86400000 < 7);
     const lastWeek = records.filter(r => {
-      const d = new Date(r.date);
-      const diff = (now - d) / 86400000;
+      const diff = (now - new Date(r.date)) / 86400000;
       return diff >= 7 && diff < 14;
     });
     if (thisWeek.length < 3 || lastWeek.length < 3) return null;
-
     const thisHa = thisWeek.filter(r => r.headache).length;
     const lastHa = lastWeek.filter(r => r.headache).length;
     const thisSleep = (thisWeek.reduce((s, r) => s + r.sleepHours, 0) / thisWeek.length).toFixed(1);
     const lastSleep = (lastWeek.reduce((s, r) => s + r.sleepHours, 0) / lastWeek.length).toFixed(1);
-
-    return { thisHa, lastHa, thisSleep, lastSleep, thisLen: thisWeek.length, lastLen: lastWeek.length };
+    return { thisHa, lastHa, thisSleep, lastSleep };
   })();
 
-  // AI 分析（透過 GAS 代理呼叫 Gemini，API Key 保存在 GAS PropertiesService）
   const runAiAnalysis = async () => {
     setLoading(true);
     try {
       const last14 = records.slice(-14);
       const summary = last14.map(r =>
-        `${r.date}: 頭痛=${r.headache ? `是(${r.intensity}/10,${Array.isArray(r.location) ? r.location.join("/") : ""})` : "無"} 肩頸=${r.neckPain}/10 睡=${r.sleepHours}h(品質${r.sleepQuality}/5) 月經=${r.menstrualPhase} 壓力=${r.stress}/5 久坐=${r.sittingTime} 運動=${r.exercise ? "有" : "無"} 咖啡因=${r.caffeine ? "有" : "無"}`
+        `${r.date}: 頭痛=${r.headache ? `是(${r.intensity}/10,${Array.isArray(r.location) ? r.location.join("/") : ""})` : "無"} 肩頸=${r.neckPain}/10(${(r.neckSide || []).join("/") || "未記"}) 睡=${r.sleepHours}h(品質${r.sleepQuality}/5) 壓力=${r.stress}/5 久坐=${r.sittingTime} 運動=${r.exercise ? "有" : "無"} 咖啡因=${r.caffeine ? "有" : "無"} 飲水=${r.waterOver1500 === true ? "足" : r.waterOver1500 === false ? "不足" : "未記"} 氣溫=${r.weather_temp ?? "?"}°C 氣壓=${r.weather_pressure ?? "?"} ${r.notes ? `備註:${r.notes}` : ""}`
       ).join("\n");
 
       const prompt = `你是一個溫柔可愛的健康小助手，分析以下 14 天的偏頭痛追蹤資料。
@@ -541,15 +801,13 @@ ${summary}
 
 注意：回覆保持在 200 字以內，用繁體中文。`;
 
-      // 不帶 Content-Type header，避免 CORS preflight 問題
       const res = await fetch(GAS_URL, {
         method: "POST",
         body: JSON.stringify({ action: "ai_analysis", token: TOKEN, prompt }),
       });
       const data = await res.json();
-      const text = data.text || data.error || "分析暫時無法完成，請稍後再試～";
-      setAiResponse(text);
-    } catch (e) {
+      setAiResponse(data.text || data.error || "分析暫時無法完成，請稍後再試～");
+    } catch {
       setAiResponse("🤖 AI 小助手暫時休息中…（請確認 GAS 連線設定）");
     }
     setLoading(false);
@@ -558,15 +816,10 @@ ${summary}
   return (
     <div>
       <div style={{ textAlign: "center", marginBottom: 16, padding: "10px 0" }}>
-        <div style={{ fontSize: 20, color: T.text, fontFamily: font, fontWeight: 600 }}>
-          🧠 AI 洞察分析
-        </div>
-        <div style={{ fontSize: 13, color: T.textLight, fontFamily: font, marginTop: 4 }}>
-          幫你找出自己沒發現的規律
-        </div>
+        <div style={{ fontSize: 20, color: T.text, fontFamily: font, fontWeight: 600 }}>🧠 AI 洞察分析</div>
+        <div style={{ fontSize: 13, color: T.textLight, fontFamily: font, marginTop: 4 }}>幫你找出自己沒發現的規律</div>
       </div>
 
-      {/* Week Comparison */}
       {weekCompare && (
         <Card style={{ background: weekCompare.thisHa <= weekCompare.lastHa ? T.successLight : T.dangerLight, border: "none" }}>
           <div style={{ fontSize: 14, color: T.text, fontFamily: font, lineHeight: 1.8 }}>
@@ -584,7 +837,6 @@ ${summary}
         </Card>
       )}
 
-      {/* Trigger Ranking */}
       <Card>
         <SectionLabel>🎯 個人 Trigger 排行</SectionLabel>
         {ruleInsights.length === 0 ? (
@@ -614,14 +866,10 @@ ${summary}
         )}
       </Card>
 
-      {/* AI Analysis */}
       <Card>
         <SectionLabel>🤖 AI 小助手分析</SectionLabel>
         {aiResponse ? (
-          <div style={{
-            fontSize: 14, color: T.text, fontFamily: font, lineHeight: 1.8,
-            whiteSpace: "pre-wrap",
-          }}>
+          <div style={{ fontSize: 14, color: T.text, fontFamily: font, lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
             {aiResponse}
           </div>
         ) : (
@@ -631,8 +879,8 @@ ${summary}
                 padding: "12px 24px", borderRadius: 16, border: "none",
                 background: records.length < 7 ? T.border : `linear-gradient(135deg, ${T.primary}, ${T.accent})`,
                 color: records.length < 7 ? T.textLight : "#fff",
-                fontSize: 14, fontWeight: 600, fontFamily: font, cursor: records.length < 7 ? "not-allowed" : "pointer",
-                transition: "all 0.2s",
+                fontSize: 14, fontWeight: 600, fontFamily: font,
+                cursor: records.length < 7 ? "not-allowed" : "pointer", transition: "all 0.2s",
               }}>
               {loading ? "🔍 分析中..." : records.length < 7 ? "📝 累積 7 天資料後可分析" : "✨ 請 AI 小助手分析"}
             </button>
@@ -645,10 +893,12 @@ ${summary}
 
 // ========== MAIN APP ==========
 export default function MigraineTracker() {
+  const [authed, setAuthed] = useState(() => !!sessionStorage.getItem("migraine_auth"));
   const [tab, setTab] = useState("record");
   const [records, setRecords] = useState([]);
 
   useEffect(() => {
+    if (!authed) return;
     if (DEMO_MODE) {
       setRecords(generateMockData());
     } else if (GAS_URL) {
@@ -657,32 +907,50 @@ export default function MigraineTracker() {
         .then(d => setRecords(d.records || []))
         .catch(console.error);
     }
-  }, []);
+  }, [authed]);
 
-  const handleSave = useCallback((form) => {
+  const initialLastPeriodDate = useMemo(() => {
+    const withDate = records.filter(r => r.lastPeriodDate).sort((a, b) => b.date.localeCompare(a.date));
+    if (withDate.length > 0) return withDate[0].lastPeriodDate;
+    return localStorage.getItem("migraine_lastPeriodDate") || "";
+  }, [records]);
+
+  const handleSave = useCallback(async (form) => {
     const today = new Date().toISOString().split("T")[0];
+
+    let weather = {};
+    try {
+      weather = await fetchWeather();
+    } catch { /* weather is optional */ }
+
     const record = {
       date: today,
       headache: form.headache ? 1 : 0,
       intensity: form.headache ? form.intensity : 0,
       location: form.location,
       neckPain: form.neckPain,
+      neckSide: form.neckSide,
       sleepHours: form.sleepHours,
       sleepQuality: form.sleepQuality,
-      menstrualPhase: form.menstrualPhase,
+      lastPeriodDate: form.lastPeriodDate,
       stress: form.stress,
       sittingTime: form.sittingTime,
       exercise: form.exercise ? 1 : 0,
       caffeine: form.caffeine ? 1 : 0,
+      waterOver1500: form.waterOver1500,
+      notes: form.notes,
+      ...weather,
     };
 
-    // 更新本地
+    if (form.lastPeriodDate) {
+      localStorage.setItem("migraine_lastPeriodDate", form.lastPeriodDate);
+    }
+
     setRecords(prev => {
       const filtered = prev.filter(r => r.date !== today);
       return [...filtered, record].sort((a, b) => a.date.localeCompare(b.date));
     });
 
-    // 送到 GAS
     if (GAS_URL && !DEMO_MODE) {
       fetch(GAS_URL, {
         method: "POST",
@@ -690,6 +958,10 @@ export default function MigraineTracker() {
       }).catch(console.error);
     }
   }, []);
+
+  if (!authed) {
+    return <PasswordGate onVerified={() => setAuthed(true)} />;
+  }
 
   const tabs = [
     { id: "record", label: "紀錄", emoji: "📝" },
@@ -699,15 +971,17 @@ export default function MigraineTracker() {
 
   return (
     <div style={{
-      fontFamily: font, background: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto",
-      paddingBottom: 80,
+      fontFamily: font, background: T.bg, minHeight: "100vh",
+      maxWidth: 480, margin: "0 auto", paddingBottom: 80,
     }}>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         input[type="range"] { -webkit-appearance: none; appearance: none; background: ${T.border}; border-radius: 4px; outline: none; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: ${T.primary}; cursor: pointer; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+        input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; background: ${T.bg}; }
+        textarea { font-family: ${font}; }
       `}</style>
 
       {/* App Header */}
@@ -726,7 +1000,7 @@ export default function MigraineTracker() {
 
       {/* Content */}
       <div style={{ padding: "0 16px", animation: "fadeIn 0.3s ease" }}>
-        {tab === "record" && <RecordTab onSave={handleSave} />}
+        {tab === "record" && <RecordTab onSave={handleSave} initialLastPeriodDate={initialLastPeriodDate} />}
         {tab === "trends" && <TrendsTab records={records} />}
         {tab === "insights" && <InsightsTab records={records} />}
       </div>
