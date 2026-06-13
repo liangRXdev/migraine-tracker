@@ -203,12 +203,14 @@ const PasswordGate = ({ onVerified }) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `${GAS_URL}?action=verify_password&token=${TOKEN}&password=${encodeURIComponent(input)}`
-      );
+      const res = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "verify_password", token: TOKEN, password: input }),
+      });
       const data = await res.json();
       if (data.valid) {
-        sessionStorage.setItem("migraine_auth", "1");
+        // 密碼存在 session（不在 bundle 裡），作為每筆請求的真正憑證
+        sessionStorage.setItem("migraine_pw", input);
         onVerified();
       } else {
         setError("密碼不對，再試試看 ～");
@@ -804,7 +806,7 @@ ${summary}
 
       const res = await fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "ai_analysis", token: TOKEN, prompt }),
+        body: JSON.stringify({ action: "ai_analysis", token: TOKEN, password: sessionStorage.getItem("migraine_pw"), prompt }),
       });
       if (!res.ok) throw new Error(`GAS 回應 HTTP ${res.status}`);
       const data = await res.json();
@@ -897,7 +899,7 @@ ${summary}
 
 // ========== MAIN APP ==========
 export default function MigraineTracker() {
-  const [authed, setAuthed] = useState(() => !!sessionStorage.getItem("migraine_auth"));
+  const [authed, setAuthed] = useState(() => !!sessionStorage.getItem("migraine_pw"));
   const [tab, setTab] = useState("record");
   const [records, setRecords] = useState([]);
 
@@ -906,9 +908,20 @@ export default function MigraineTracker() {
     if (DEMO_MODE) {
       setRecords(generateMockData());
     } else if (GAS_URL) {
-      fetch(`${GAS_URL}?action=fetch&token=${TOKEN}`)
+      fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "fetch", token: TOKEN, password: sessionStorage.getItem("migraine_pw") }),
+      })
         .then(r => r.json())
-        .then(d => setRecords(d.records || []))
+        .then(d => {
+          if (d.error === "Forbidden") {
+            // 密碼失效（例如已更換）→ 清除並回到密碼頁
+            sessionStorage.removeItem("migraine_pw");
+            setAuthed(false);
+            return;
+          }
+          setRecords(d.records || []);
+        })
         .catch(console.error);
     }
   }, [authed]);
@@ -958,7 +971,7 @@ export default function MigraineTracker() {
     if (GAS_URL && !DEMO_MODE) {
       fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "record", token: TOKEN, ...record }),
+        body: JSON.stringify({ action: "record", token: TOKEN, password: sessionStorage.getItem("migraine_pw"), ...record }),
       }).catch(console.error);
     }
   }, []);

@@ -68,10 +68,19 @@ npm run build
 
 ## 安全機制
 
-所有 GAS 請求都帶有 token 驗證，防止未授權讀寫與 AI 端點濫用：
+採雙層憑證：**token（防呆）+ 密碼（真正的閘門）**。
 
-- Token 存於 `.env`（本地）與 GitHub Actions Secret（CI/CD），不進 git
-- GAS 端讀取 `PropertiesService` 的 `API_SECRET` 驗證每筆請求
+- **Token**：存於 `.env`（本地）與 GitHub Actions Secret（CI/CD），不進 git。
+  ⚠️ 注意：`VITE_*` 變數會被打包進前端 bundle，**token 對訪客是可見的**，僅作基本防呆，不可視為機密。
+- **密碼（真正保護）**：所有讀取 / 寫入 / AI 端點都必須通過密碼驗證。
+  - 密碼由使用者輸入、存於瀏覽器 `sessionStorage`，**不在 bundle 內**。
+  - 經 **HTTPS POST body** 傳輸（不走 URL query，不會留在歷史 / log）。
+  - GAS 端以 **SHA-256 雜湊**比對，「密碼」分頁只存雜湊值、不存明文。
+  - 資料端點一律走 POST；GET 僅保留 `ping`。
+- Gemini / Weather API Key 存於 GAS `PropertiesService`，不送到前端。
+
+> 一次性設定密碼：在 GAS 編輯器執行 `setPassword('你的密碼')`，會把雜湊寫入「密碼」分頁 A1。
+> 進一步強化可改用 Google 登入授權，徹底擺脫公開 token。
 
 ---
 
@@ -88,11 +97,15 @@ npm run build
 
 3. GAS endpoint：
 
-| action | 方法 | 說明 |
-|--------|------|------|
-| `fetch` | GET | 回傳最近 90 天記錄 |
-| `record` | POST | 寫入當日記錄至 Sheets（同日可覆蓋） |
-| `ai_analysis` | POST | 轉送 prompt 至 Gemini，回傳分析文字 |
+| action | 方法 | 需密碼 | 說明 |
+|--------|------|:----:|------|
+| `ping` | GET | ✗ | 健康檢查 |
+| `verify_password` | POST | — | 驗證密碼（回傳 `{valid}`） |
+| `fetch` | POST | ✓ | 回傳最近 90 天記錄 |
+| `record` | POST | ✓ | 寫入當日記錄至 Sheets（同日可覆蓋） |
+| `ai_analysis` | POST | ✓ | 轉送 prompt 至 Gemini，回傳分析文字 |
+
+> 所有帶 ✓ 的端點需在 POST body 同時提供 `token` 與 `password`。
 | `stats` | GET | 回傳統計摘要與 Trigger 排行 |
 
 ---
