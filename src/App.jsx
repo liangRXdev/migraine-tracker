@@ -806,10 +806,13 @@ ${summary}
         method: "POST",
         body: JSON.stringify({ action: "ai_analysis", token: TOKEN, prompt }),
       });
+      if (!res.ok) throw new Error(`GAS 回應 HTTP ${res.status}`);
       const data = await res.json();
-      setAiResponse(data.text || data.error || "分析暫時無法完成，請稍後再試～");
-    } catch {
-      setAiResponse("🤖 AI 小助手暫時休息中…（請確認 GAS 連線設定）");
+      if (data.error) throw new Error(data.error);
+      setAiResponse(data.text || "分析暫時無法完成，請稍後再試～");
+    } catch (e) {
+      console.error("AI analysis failed:", e);
+      setAiResponse(`🤖 AI 小助手暫時休息中…（${e?.message || "連線失敗"}，請確認 GAS 連線設定）`);
     }
     setLoading(false);
   };
