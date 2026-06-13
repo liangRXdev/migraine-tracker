@@ -803,7 +803,7 @@ ${summary}
 
       const res = await fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({ action: "ai_analysis", token: 018082b4fdffa3cf2ce66f90724d837a590ee1e141f01b8c, prompt }),
+        body: JSON.stringify({ action: "ai_analysis", token: TOKEN, prompt }),
       });
       const data = await res.json();
       setAiResponse(data.text || data.error || "分析暫時無法完成，請稍後再試～");
