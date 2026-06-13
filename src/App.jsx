@@ -785,7 +785,7 @@ const InsightsTab = ({ records }) => {
     try {
       const last14 = records.slice(-14);
       const summary = last14.map(r =>
-        `${r.date}: 頭痛=${r.headache ? `是(${r.intensity}/10,${Array.isArray(r.location) ? r.location.join("/") : ""})` : "無"} 肩頸=${r.neckPain}/10(${(r.neckSide || []).join("/") || "未記"}) 睡=${r.sleepHours}h(品質${r.sleepQuality}/5) 壓力=${r.stress}/5 久坐=${r.sittingTime} 運動=${r.exercise ? "有" : "無"} 咖啡因=${r.caffeine ? "有" : "無"} 飲水=${r.waterOver1500 === true ? "足" : r.waterOver1500 === false ? "不足" : "未記"} 氣溫=${r.weather_temp ?? "?"}°C 氣壓=${r.weather_pressure ?? "?"} ${r.notes ? `備註:${r.notes}` : ""}`
+        `${r.date}: 頭痛=${r.headache ? `是(${r.intensity}/10,${Array.isArray(r.location) ? r.location.join("/") : (r.location || "").toString().replace(/,/g, "/")})` : "無"} 肩頸=${r.neckPain}/10(${(Array.isArray(r.neckSide) ? r.neckSide.join("/") : (r.neckSide || "").toString().replace(/,/g, "/")) || "未記"}) 睡=${r.sleepHours}h(品質${r.sleepQuality}/5) 壓力=${r.stress}/5 久坐=${r.sittingTime} 運動=${r.exercise ? "有" : "無"} 咖啡因=${r.caffeine ? "有" : "無"} 飲水=${r.waterOver1500 === true ? "足" : r.waterOver1500 === false ? "不足" : "未記"} 氣溫=${r.weather_temp ?? "?"}°C 氣壓=${r.weather_pressure ?? "?"} ${r.notes ? `備註:${r.notes}` : ""}`
       ).join("\n");
 
       const prompt = `你是一個溫柔可愛的健康小助手，分析以下 14 天的偏頭痛追蹤資料。
