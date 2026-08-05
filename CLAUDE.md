@@ -46,4 +46,10 @@ thinkingConfig: { thinkingBudget: 0 }   // 程式碼.js:301
 ## 資料
 
 - 一天一列，`findRowByDate_()` 以日期為鍵——同日重複送出是**更新**不是新增
+
+**排序契約：後端回傳新→舊，前端一律正規化成舊→新。**
+
+`fetchRecords_()` 結尾是降冪（`程式碼.js:165`），但前端全站都假設升冪——趨勢圖與 AI 分析的 `slice(-14)`（取「最近」14 天）、圖表 X 軸由左到右的時間方向、`handleSave` 插入當日紀錄的排序。任何進入 `records` state 的資料都必須先過 `sortByDateAsc()`（`App.jsx`），**不要改在個別使用點各自 reverse**——漏一處就是靜默的錯誤資料，不會報錯。
+
+這個坑踩過且拖很久才發現：`generateMockData()` 產生的是升冪，`DEMO_MODE = true` 時一切正常，切到真實後端後方向相反，趨勢圖與 AI 分析被鎖在 Sheet 最早的 14 天約兩個月才被察覺（畫面看起來正常，只是日期舊）。新增任何 `records` 來源（本機快取、匯入、分頁載入）照此辦理。
 - 這是個人健康資料，Sheet 不對外分享；repo 是 public，**不要把任何實際紀錄或 Sheet ID 貼進 README、issue 或測試資料**
