@@ -70,6 +70,13 @@ const generateMockData = () => {
   return data;
 };
 
+// ========== 資料正規化 ==========
+// 後端 fetchRecords_ 回傳的是新→舊，但全站（趨勢圖、AI 分析的 slice(-14)、圖表 X 軸）
+// 都假設舊→新。在入口統一排成舊→新，不依賴後端順序——前後端是兩套獨立部署，
+// 後端排序改了前端不會知道。
+const sortByDateAsc = (list) =>
+  [...list].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
 // ========== THEME ==========
 const T = {
   bg: "#FFF8F3",
@@ -629,7 +636,12 @@ const TrendsTab = ({ records }) => {
     <div>
       <div style={{ textAlign: "center", marginBottom: 16, padding: "10px 0" }}>
         <div style={{ fontSize: 20, color: T.text, fontFamily: font, fontWeight: 600 }}>
-          📊 最近 30 天趨勢
+          📊 整體趨勢
+        </div>
+        {/* 各區塊時間範圍不同：統計卡與星期分布用後端回傳的全部紀錄（近 90 天），
+            折線圖只取最近 14 日。標題不再宣稱單一天數，各區塊自己標清楚。 */}
+        <div style={{ fontSize: 11, color: T.textLight, fontFamily: font, marginTop: 4 }}>
+          統計為近 90 天內的 {totalDays} 筆紀錄
         </div>
       </div>
 
@@ -711,7 +723,7 @@ const TrendsTab = ({ records }) => {
 
       {/* Headache by Day of Week */}
       <Card>
-        <SectionLabel>星期幾最容易頭痛？</SectionLabel>
+        <SectionLabel>星期幾最容易頭痛？（近 90 天）</SectionLabel>
         <ResponsiveContainer width="100%" height={160}>
           <BarChart data={(() => {
             const days = ["日", "一", "二", "三", "四", "五", "六"];
@@ -906,7 +918,7 @@ export default function MigraineTracker() {
   useEffect(() => {
     if (!authed) return;
     if (DEMO_MODE) {
-      setRecords(generateMockData());
+      setRecords(sortByDateAsc(generateMockData()));
     } else if (GAS_URL) {
       fetch(GAS_URL, {
         method: "POST",
@@ -920,7 +932,7 @@ export default function MigraineTracker() {
             setAuthed(false);
             return;
           }
-          setRecords(d.records || []);
+          setRecords(sortByDateAsc(d.records || []));
         })
         .catch(console.error);
     }
@@ -965,7 +977,7 @@ export default function MigraineTracker() {
 
     setRecords(prev => {
       const filtered = prev.filter(r => r.date !== today);
-      return [...filtered, record].sort((a, b) => a.date.localeCompare(b.date));
+      return sortByDateAsc([...filtered, record]);
     });
 
     if (GAS_URL && !DEMO_MODE) {
