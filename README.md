@@ -1,142 +1,144 @@
-# 🧠✨ 小腦袋日記 — 偏頭痛追蹤器
+# 🧠✨ Little Brain Diary — Migraine Tracker (小腦袋日記)
 
-個人偏頭痛追蹤 PWA，記錄每日症狀、生活型態與誘發因子，透過趨勢圖表與 AI 分析幫助找出頭痛規律。
+**English** | [繁體中文](README.zh-TW.md)
+
+A personal migraine-tracking PWA that logs daily symptoms, lifestyle and triggers, and uses trend charts and AI analysis to help find headache patterns. The interface is in Traditional Chinese.
 
 **Live Demo →** https://liangrxdev.github.io/migraine-tracker/
 
-> 支援安裝到手機主畫面，以 App 模式離線使用（Android Chrome / iOS Safari）
+> Can be installed to the phone home screen and used offline in app mode (Android Chrome / iOS Safari)
 
 ---
 
-## 功能
+## Features
 
-| 頁籤 | 說明 |
+| Tab | Description |
 |------|------|
-| 📝 **紀錄** | 每日填寫頭痛狀況、疼痛位置、肩頸痠痛、睡眠時數與品質、壓力、月經週期、久坐時間、運動、咖啡因 |
-| 📊 **趨勢** | 最近 14 日折線圖（頭痛強度 / 肩頸 / 睡眠）、30 日統計摘要、各星期頭痛發生率長條圖 |
-| 🧠 **洞察** | 個人 Trigger 自動排行（睡眠不足、經前期、久坐、高壓、咖啡因）、本週 vs 上週比較、Gemini AI 分析 |
+| 📝 **Log** | Daily entry of headache status, pain location, neck/shoulder soreness, sleep hours and quality, stress, menstrual cycle, sitting time, exercise, caffeine |
+| 📊 **Trends** | 14-day line chart (headache intensity / neck & shoulder / sleep), 30-day summary statistics, bar chart of headache rate by weekday |
+| 🧠 **Insights** | Automatic personal trigger ranking (sleep deprivation, premenstrual phase, prolonged sitting, high stress, caffeine), this week vs last week, Gemini AI analysis |
 
 ---
 
-## 安裝為 App（PWA）
+## Install as an App (PWA)
 
-| 平台 | 步驟 |
+| Platform | Steps |
 |------|------|
-| **Android Chrome** | 右上角選單 → 新增到主畫面 |
-| **iOS Safari** | 分享按鈕 → 加入主畫面 |
-| **桌面 Chrome** | 網址列右側安裝圖示 |
+| **Android Chrome** | Top-right menu → Add to Home screen |
+| **iOS Safari** | Share button → Add to Home Screen |
+| **Desktop Chrome** | Install icon on the right of the address bar |
 
-安裝後以全螢幕 App 模式開啟，無瀏覽器 UI，字體與圖示已快取可離線瀏覽。
+Once installed it opens full-screen in app mode without browser UI; fonts and icons are cached for offline browsing.
 
 ---
 
-## 技術架構
+## Architecture
 
 ```
 Frontend (GitHub Pages / PWA)    Backend (Google Apps Script)
-React 18 + Vite 6                ├─ 儲存記錄 → Google Sheets
-Recharts 圖表                    └─ 呼叫 Gemini API（AI 分析）
+React 18 + Vite 6                ├─ Save records → Google Sheets
+Recharts charts                  └─ Call Gemini API (AI analysis)
 vite-plugin-pwa (Workbox)
 ```
 
-- **前端**：React 18、Vite 6、Recharts、vite-plugin-pwa
-- **Service Worker**：Workbox（App shell CacheFirst；Google Fonts 快取一年；GAS API NetworkOnly）
-- **後端**：Google Apps Script，Gemini / Weather API Key 存於 `PropertiesService`
-- **資料儲存**：Google Sheets（每列一天記錄）
-- **部署**：GitHub Actions → GitHub Pages
+- **Frontend**: React 18, Vite 6, Recharts, vite-plugin-pwa
+- **Service worker**: Workbox (app shell CacheFirst; Google Fonts cached for one year; GAS API NetworkOnly)
+- **Backend**: Google Apps Script; Gemini / Weather API keys stored in `PropertiesService`
+- **Storage**: Google Sheets (one row per day)
+- **Deployment**: GitHub Actions → GitHub Pages
 
 ---
 
-## 本地開發
+## Local Development
 
 ```bash
-# 安裝依賴
+# Install dependencies
 npm install
 
-# 啟動開發伺服器
+# Start the dev server
 npm run dev
 
-# 建置（含 PWA 產生 sw.js + manifest）
+# Build (including PWA sw.js + manifest generation)
 npm run build
 ```
 
-> 若要使用真實資料，需在 `src/App.jsx` 的 `GAS_URL` 填入自己的 GAS 部署網址，  
-> 並在 `.env` 設定 `VITE_GAS_TOKEN`。  
-> 測試用途可將 `DEMO_MODE` 改為 `true`，會產生 30 天假資料。
+> To use real data, set `GAS_URL` in `src/App.jsx` to your own GAS deployment URL,  
+> and set `VITE_GAS_TOKEN` in `.env`.  
+> For testing, set `DEMO_MODE` to `true` to generate 30 days of fake data.
 
 ---
 
-## 安全機制
+## Security
 
-採雙層憑證：**token（防呆）+ 密碼（真正的閘門）**。
+Two layers of credentials: **token (basic guard) + password (the real gate)**.
 
-- **Token**：存於 `.env`（本地）與 GitHub Actions Secret（CI/CD），不進 git。
-  ⚠️ 注意：`VITE_*` 變數會被打包進前端 bundle，**token 對訪客是可見的**，僅作基本防呆，不可視為機密。
-- **密碼（真正保護）**：所有讀取 / 寫入 / AI 端點都必須通過密碼驗證。
-  - 密碼由使用者輸入、存於瀏覽器 `sessionStorage`，**不在 bundle 內**。
-  - 經 **HTTPS POST body** 傳輸（不走 URL query，不會留在歷史 / log）。
-  - GAS 端以 **SHA-256 雜湊**比對，「密碼」分頁只存雜湊值、不存明文。
-  - 資料端點一律走 POST；GET 僅保留 `ping`。
-- Gemini / Weather API Key 存於 GAS `PropertiesService`，不送到前端。
+- **Token**: stored in `.env` (local) and a GitHub Actions secret (CI/CD), never committed.
+  ⚠️ Note: `VITE_*` variables are bundled into the frontend, so **the token is visible to visitors**; it is only a basic guard and must not be treated as secret.
+- **Password (real protection)**: every read / write / AI endpoint requires password verification.
+  - The password is entered by the user and kept in the browser's `sessionStorage`, **not in the bundle**.
+  - It is sent in the **HTTPS POST body** (not in the URL query, so it doesn't end up in history / logs).
+  - The GAS side compares **SHA-256 hashes**; the "密碼" (password) sheet stores only the hash, never plaintext.
+  - All data endpoints use POST; GET is kept only for `ping`.
+- Gemini / Weather API keys live in GAS `PropertiesService` and are never sent to the frontend.
 
-> 一次性設定密碼：在 GAS 編輯器執行 `setPassword('你的密碼')`，會把雜湊寫入「密碼」分頁 A1。
-> 進一步強化可改用 Google 登入授權，徹底擺脫公開 token。
+> One-time password setup: run `setPassword('your-password')` in the GAS editor; it writes the hash to cell A1 of the "密碼" sheet.
+> For stronger protection, switch to Google sign-in authorization and drop the public token entirely.
 
 ---
 
-## GAS 後端設定
+## GAS Backend Setup
 
-1. 在 Google Apps Script 建立新專案，部署為「網頁應用程式」（Anyone 可存取）
-2. 在「專案設定 → 指令碼屬性」加入：
+1. Create a new Google Apps Script project and deploy it as a "Web app" (accessible by Anyone)
+2. Under "Project Settings → Script Properties", add:
 
-| 屬性 | 說明 |
+| Property | Description |
 |------|------|
-| `API_SECRET` | 與 `.env` 的 `VITE_GAS_TOKEN` 相同值 |
-| `GEMINI_API_KEY` | Gemini API Key |
-| `WEATHER_API_KEY` | OpenWeatherMap API Key（選填） |
+| `API_SECRET` | Same value as `VITE_GAS_TOKEN` in `.env` |
+| `GEMINI_API_KEY` | Gemini API key |
+| `WEATHER_API_KEY` | OpenWeatherMap API key (optional) |
 
-3. GAS endpoint：
+3. GAS endpoints:
 
-| action | 方法 | 需密碼 | 說明 |
+| action | Method | Password | Description |
 |--------|------|:----:|------|
-| `ping` | GET | ✗ | 健康檢查 |
-| `verify_password` | POST | — | 驗證密碼（回傳 `{valid}`） |
-| `fetch` | POST | ✓ | 回傳最近 90 天記錄 |
-| `record` | POST | ✓ | 寫入當日記錄至 Sheets（同日可覆蓋） |
-| `ai_analysis` | POST | ✓ | 轉送 prompt 至 Gemini，回傳分析文字 |
+| `ping` | GET | ✗ | Health check |
+| `verify_password` | POST | — | Verify password (returns `{valid}`) |
+| `fetch` | POST | ✓ | Returns the last 90 days of records |
+| `record` | POST | ✓ | Writes today's record to Sheets (same-day entries can be overwritten) |
+| `ai_analysis` | POST | ✓ | Forwards the prompt to Gemini and returns the analysis text |
 
-> 所有帶 ✓ 的端點需在 POST body 同時提供 `token` 與 `password`。
-| `stats` | GET | 回傳統計摘要與 Trigger 排行 |
+> Every endpoint marked ✓ requires both `token` and `password` in the POST body.
+| `stats` | GET | Returns summary statistics and trigger ranking |
 
 ---
 
-## 部署流程
+## Deployment
 
-Push 到 `main` branch 後，GitHub Actions 自動執行：
+After a push to the `main` branch, GitHub Actions runs:
 
 ```
-build job  →  npm ci + npm run build (含 VITE_GAS_TOKEN 注入)
+build job  →  npm ci + npm run build (with VITE_GAS_TOKEN injected)
 deploy job →  actions/deploy-pages → GitHub Pages
 ```
 
-Workflow 檔案：`.github/workflows/deploy.yml`
+Workflow file: `.github/workflows/deploy.yml`
 
 ---
 
-## 記錄欄位說明
+## Record Fields
 
-| 欄位 | 型別 | 說明 |
+| Field | Type | Description |
 |------|------|------|
-| `headache` | 0/1 | 是否頭痛 |
-| `intensity` | 0–10 | 頭痛強度 |
-| `location` | string[] | 疼痛位置（左側/右側/後腦/眼窩/整圈） |
-| `neckPain` | 0–10 | 肩頸痠痛程度 |
-| `sleepHours` | 0–14 | 睡眠時數 |
-| `sleepQuality` | 1–5 | 睡眠品質（⭐ 評分） |
-| `menstrualPhase` | string | 無/經前/月經中/排卵期 |
-| `stress` | 1–5 | 壓力程度 |
+| `headache` | 0/1 | Headache or not |
+| `intensity` | 0–10 | Headache intensity |
+| `location` | string[] | Pain location (left / right / occipital / orbital / band-like) |
+| `neckPain` | 0–10 | Neck/shoulder soreness |
+| `sleepHours` | 0–14 | Hours of sleep |
+| `sleepQuality` | 1–5 | Sleep quality (⭐ rating) |
+| `menstrualPhase` | string | None / premenstrual / menstruating / ovulation |
+| `stress` | 1–5 | Stress level |
 | `sittingTime` | string | <2hr / 2-6hr / >6hr |
-| `exercise` | 0/1 | 是否運動 |
-| `caffeine` | 0/1 | 是否攝取咖啡因 |
-| `weather_temp` | number | 氣溫（℃，自動抓取） |
-| `weather_pressure` | number | 氣壓（hPa，自動抓取） |
+| `exercise` | 0/1 | Exercised or not |
+| `caffeine` | 0/1 | Caffeine intake or not |
+| `weather_temp` | number | Temperature (℃, fetched automatically) |
+| `weather_pressure` | number | Barometric pressure (hPa, fetched automatically) |
