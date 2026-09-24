@@ -106,9 +106,9 @@ Two layers of credentials: **token (basic guard) + password (the real gate)**.
 | `fetch` | POST | ✓ | Returns the last 90 days of records |
 | `record` | POST | ✓ | Writes today's record to Sheets (same-day entries can be overwritten) |
 | `ai_analysis` | POST | ✓ | Forwards the prompt to Gemini and returns the analysis text |
+| `stats` | POST | ✓ | Returns summary statistics and trigger ranking |
 
 > Every endpoint marked ✓ requires both `token` and `password` in the POST body.
-| `stats` | GET | Returns summary statistics and trigger ranking |
 
 ---
 

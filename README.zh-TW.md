@@ -106,9 +106,9 @@ npm run build
 | `fetch` | POST | ✓ | 回傳最近 90 天記錄 |
 | `record` | POST | ✓ | 寫入當日記錄至 Sheets（同日可覆蓋） |
 | `ai_analysis` | POST | ✓ | 轉送 prompt 至 Gemini，回傳分析文字 |
+| `stats` | POST | ✓ | 回傳統計摘要與 Trigger 排行 |
 
 > 所有帶 ✓ 的端點需在 POST body 同時提供 `token` 與 `password`。
-| `stats` | GET | 回傳統計摘要與 Trigger 排行 |
 
 ---
 
